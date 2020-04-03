@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+  labels:
+    app: test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      labels:
+        app: test
+    spec:
+      containers:
+      - name: test
+        image: analogic/poste.io
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - /data/control.sh
+          initialDelaySeconds: 2000
+          periodSeconds: 1800
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /data/control.sh
+          subPath: control.sh
+          name: control
+      volumes:
+      - name: control
+        configMap:
+          defaultMode: 477
+          name: control
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: control
+  labels:
+    app: test
+data:
+  control.sh: |-
+    #!/bin/bash
+    size=$(du -hs /data -B G |  sed 's/G.*//')
+
+    if [ $size -lt 10 ];
+    then
+    echo "it is ok"
+    else
+    echo "mailing"
+    printf "To:anilkuscu95@gmail.com\nFrom:alertmanager@gmail.com\nSubject: Smtp Service Log Size Alarm! \n\n\n\n\n Mail service log size is $size Gi and it has been restarted." > mail.txt
+    curl --url 'smtps://smtp.gmail.com:465' --ssl-reqd --mail-from 'alertmanager@gmail.com' --mail-rcpt 'anilkuscu95@gmail.com' --upload-file mail.txt --user 'alertmanager@gmail.com:<my-pass>' --insecure
+    rm -fr /data/log/*
+    return 0
+    fi
